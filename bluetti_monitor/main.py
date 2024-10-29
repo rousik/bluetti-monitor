@@ -3,7 +3,6 @@ import struct
 from time import sleep
 
 import crcmod.predefined
-import hexdump
 from bleak import BleakClient
 from prometheus_client import Gauge, start_http_server
 
@@ -31,7 +30,8 @@ def read_fields_cmd(offset, n) -> bytearray:
 
 def bt_notify_callback(sender: int, data: bytearray):
     print(f"Got {len(data)} bytes response from the device")
-    hexdump.hexdump(data)
+    # hexdump.hexdump(data)
+    # print("----")
     # TODO: Run CRC validation and header checks...
 
     # 36, 37, 38, 39, 40 (null), 41 (null), 42 (batt_pct)
@@ -52,11 +52,12 @@ def bt_notify_callback(sender: int, data: bytearray):
     # print("---")
 
 
-async def main(address):
+async def async_run(address):
     start_http_server(PROMETHEUS_PORT)
     stop_event = asyncio.Event()
 
     async with BleakClient(address) as client:
+        print(f"Connected to bluetti battery at {address}")
         await client.start_notify(
             NOTIFY_UUID,
             bt_notify_callback,
@@ -71,4 +72,9 @@ async def main(address):
         await stop_event.wait()
 
 
-asyncio.run(main(BLUETTI_UUID))
+def main():
+    asyncio.run(async_run(BLUETTI_UUID))
+
+
+if __name__ == "__main__":
+    main()
