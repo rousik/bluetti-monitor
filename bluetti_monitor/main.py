@@ -9,6 +9,7 @@ from prometheus_client import Gauge, start_http_server
 modbus_crc = crcmod.predefined.mkCrcFun("modbus")
 
 PROMETHEUS_PORT = 8000
+POLL_PERIOD = 1  # Seconds
 BLUETTI_UUID = "A8E84D1F-675E-0725-69CE-A716D62C3A91"
 WRITE_UUID = "0000ff02-0000-1000-8000-00805f9b34fb"
 NOTIFY_UUID = "0000ff01-0000-1000-8000-00805f9b34fb"
@@ -64,7 +65,7 @@ async def async_run(address):
         )
         # Try reading registers
         while True:
-            sleep(1)
+            sleep(POLL_PERIOD)
             await client.write_gatt_char(
                 WRITE_UUID, read_fields_cmd(36, 10), response=True
             )
