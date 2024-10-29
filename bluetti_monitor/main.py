@@ -5,13 +5,20 @@ from time import sleep
 import crcmod.predefined
 import hexdump
 from bleak import BleakClient
+from prometheus_client import Gauge, start_http_server
 
 modbus_crc = crcmod.predefined.mkCrcFun("modbus")
 
-
+PROMETHEUS_PORT = 8000
 BLUETTI_UUID = "A8E84D1F-675E-0725-69CE-A716D62C3A91"
 WRITE_UUID = "0000ff02-0000-1000-8000-00805f9b34fb"
 NOTIFY_UUID = "0000ff01-0000-1000-8000-00805f9b34fb"
+
+DC_IN = Gauge("dc_in", "DC power input (Watts)")
+DC_OUT = Gauge("dc_out", "DC power output (Watts)")
+AC_IN = Gauge("ac_in", "AC power input (Watts)")
+AC_OUT = Gauge("ac_out", "AC power output (Watts)")
+BATTERY_PERCENT = Gauge("battery_percent", "Battery charge level (Percent)")
 
 
 def read_fields_cmd(offset, n) -> bytearray:
@@ -25,27 +32,31 @@ def read_fields_cmd(offset, n) -> bytearray:
 def bt_notify_callback(sender: int, data: bytearray):
     print(f"Got {len(data)} bytes response from the device")
     hexdump.hexdump(data)
-    # TODO: Run CRC va"lidation and header checks...
-    dc_in, ac_in, ac_out, dc_out = struct.unpack_from("!HHHH", data, 3)
+    # TODO: Run CRC validation and header checks...
+
+    # 36, 37, 38, 39, 40 (null), 41 (null), 42 (batt_pct)
     # note that kWh total at offset 41 doesn't seem to hold any value
-    batt_pct = struct.unpack_from("!H", data, 3 + 2 * 7)  # 42 offset, starts at 36
-    print(f"  DC (in: {dc_in}, out: {dc_out})")
-    print(f"  AC (in: {ac_in}, out: {ac_out})")
-    print(f"  Batt percent {batt_pct}")
-    print("---")
+    dc_in, ac_in, ac_out, dc_out, _, _, batt_pct = struct.unpack_from(
+        "!HHHHHHH", data, 3
+    )
+    DC_IN.set(dc_in)
+    DC_OUT.set(dc_out)
+    AC_IN.set(ac_in)
+    AC_OUT.set(ac_out)
+    BATTERY_PERCENT.set(batt_pct)
+
+    # TODO(rousik): publish values to prometheus & mqtt
+    # print(f"  DC (in: {dc_in}, out: {dc_out})")
+    # print(f"  AC (in: {ac_in}, out: {ac_out})")
+    # print(f"  Batt percent {batt_pct}")
+    # print("---")
 
 
 async def main(address):
+    start_http_server(PROMETHEUS_PORT)
     stop_event = asyncio.Event()
 
     async with BleakClient(address) as client:
-        # print(f"Services: {client.services}")
-        # for i, chr in client.services.characteristics.items():
-        #     print(f"* char {chr.uuid} (svc: {chr.service_uuid}): {chr.description}")
-        #     for desc in chr.descriptors:
-        #         print(f"  {desc.uuid}/{desc.handle}: {desc.description}")
-        # Register hex-dumping listener
-
         await client.start_notify(
             NOTIFY_UUID,
             bt_notify_callback,
@@ -58,21 +69,6 @@ async def main(address):
             )
 
         await stop_event.wait()
-        # print(f"Got back {data}")
-        # print(hexdump.hexdump(data))
-        # Invoke data packet read
-
-        # print(f"Services: {client.services}")
-        # for i, chr in client.services.characteristics.items():
-        #     print(f"* char {chr.uuid} (svc: {chr.service_uuid}): {chr.description}")
-        #     for desc in chr.descriptors:
-        #         print(f"  {desc.uuid}/{desc.handle}: {desc.description}")
-        # # print(f"Characteristics: {client.services.characteristics}")
-        # # print(f"Descriptors: {client.services.descriptors}")
-        # for i, dsc in client.services.descriptors.items():
-        #     print(f"* desc {dsc.uuid}/{dsc.handle}: {dsc.description}")
-        # # model_number = await client.read_gatt_char(MODEL_NBR_UUID)
-        # # print("Model Number: {0}".format("".join(map(chr, model_number))))
 
 
 asyncio.run(main(BLUETTI_UUID))
