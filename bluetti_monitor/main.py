@@ -3,6 +3,7 @@ import struct
 from time import sleep
 
 import crcmod.predefined
+import hexdump
 from bleak import BleakClient
 from prometheus_client import Gauge, start_http_server
 
@@ -31,8 +32,8 @@ def read_fields_cmd(offset, n) -> bytearray:
 
 def bt_notify_callback(sender: int, data: bytearray):
     print(f"Got {len(data)} bytes response from the device")
-    # hexdump.hexdump(data)
-    # print("----")
+    hexdump.hexdump(data)
+    print("----")
     # TODO: Run CRC validation and header checks...
 
     # 36, 37, 38, 39, 40 (null), 41 (null), 42 (batt_pct)
@@ -47,10 +48,10 @@ def bt_notify_callback(sender: int, data: bytearray):
     BATTERY_PERCENT.set(batt_pct)
 
     # TODO(rousik): publish values to prometheus & mqtt
-    # print(f"  DC (in: {dc_in}, out: {dc_out})")
-    # print(f"  AC (in: {ac_in}, out: {ac_out})")
-    # print(f"  Batt percent {batt_pct}")
-    # print("---")
+    print(f"  DC (in: {dc_in}, out: {dc_out})")
+    print(f"  AC (in: {ac_in}, out: {ac_out})")
+    print(f"  Batt percent {batt_pct}")
+    print("---")
 
 
 async def async_run(address):
@@ -67,7 +68,8 @@ async def async_run(address):
         while True:
             sleep(POLL_PERIOD)
             await client.write_gatt_char(
-                WRITE_UUID, read_fields_cmd(36, 10), response=True
+                WRITE_UUID,
+                read_fields_cmd(36, 10),
             )
 
         await stop_event.wait()
