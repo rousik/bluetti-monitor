@@ -1,17 +1,18 @@
 import asyncio
 import struct
+import datetime
 from time import sleep
 
 import crcmod.predefined
-import hexdump
 from bleak import BleakClient
 from prometheus_client import Gauge, start_http_server
 
 modbus_crc = crcmod.predefined.mkCrcFun("modbus")
 
-PROMETHEUS_PORT = 8000
+PROMETHEUS_PORT = 8002
 POLL_PERIOD = 1  # Seconds
-BLUETTI_UUID = "A8E84D1F-675E-0725-69CE-A716D62C3A91"
+#BLUETTI_UUID = "A8E84D1F-675E-0725-69CE-A716D62C3A91"
+BLUETTI_UUID = "EB:59:4D:5C:60:5E"
 WRITE_UUID = "0000ff02-0000-1000-8000-00805f9b34fb"
 NOTIFY_UUID = "0000ff01-0000-1000-8000-00805f9b34fb"
 
@@ -31,15 +32,12 @@ def read_fields_cmd(offset, n) -> bytearray:
 
 
 def bt_notify_callback(sender: int, data: bytearray):
-    print(f"Got {len(data)} bytes response from the device")
-    hexdump.hexdump(data)
-    print("----")
     # TODO: Run CRC validation and header checks...
 
-    # 36, 37, 38, 39, 40 (null), 41 (null), 42 (batt_pct)
+    # 36, 37, 38, 39, 40 (null), 41 (null), 42 (null), 43 (batt_pct)
     # note that kWh total at offset 41 doesn't seem to hold any value
-    dc_in, ac_in, ac_out, dc_out, _, _, batt_pct = struct.unpack_from(
-        "!HHHHHHH", data, 3
+    dc_in, ac_in, ac_out, dc_out, _, _, _, batt_pct = struct.unpack_from(
+        "!HHHHHHHH", data, 3
     )
     DC_IN.set(dc_in)
     DC_OUT.set(dc_out)
@@ -48,10 +46,8 @@ def bt_notify_callback(sender: int, data: bytearray):
     BATTERY_PERCENT.set(batt_pct)
 
     # TODO(rousik): publish values to prometheus & mqtt
-    print(f"  DC (in: {dc_in}, out: {dc_out})")
-    print(f"  AC (in: {ac_in}, out: {ac_out})")
-    print(f"  Batt percent {batt_pct}")
-    print("---")
+    ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print(f"{ts}: {batt_pct}% - dc_in: {dc_in}, ac_in: {ac_in}, dc_out: {dc_out}, ac_out: {ac_out}")
 
 
 async def async_run(address):
